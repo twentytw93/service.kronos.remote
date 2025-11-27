@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kronos Remote LAN – Pro</title>
+    <!-- Kronos Pro Remote LAN – v3.1 (compact layout + OSD + Subs primary + nav matrix stripe background + now playing line) -->
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <style>
+        :root {
+            --bg: #000000;
+            --panel: #111111;
+            --panel-alt: #181818;
+            --border: #444444;
+            --accent: #7b5cff;
+            --accent-soft: rgba(123, 92, 255, 0.25);
+            --text-main: #f2f2f2;
+            --text-muted: #888888;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* remove tap flash */
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* BLOCK PAGE SCROLLING */
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            position: relative;
+            overflow: hidden;
+            touch-action: manipulation; /* hint: no double-tap zoom */
+
+            /* Disable selection / long press actions */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        button {
+            /* Also disable selection on buttons explicitly */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Matrix background canvas */
+        #matrix-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 4px 0;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .nowplaying-line {
+            font-size: 11px;
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            opacity: 0.9;
+        }
+
+        .panel {
+            background-color: var(--panel);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .nav-grid {
+            display: grid;
+            grid-template-columns: 70px 70px 70px;
+            grid-template-rows: 50px 50px 50px;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .row {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            min-width: 60px;
+            height: 44px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background-color: var(--panel-alt);
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+            padding: 0 10px;
+            transition: background-color 0.12s ease,
+                        transform 0.06s ease,
+                        box-shadow 0.12s ease;
+        }
+
+        button:active {
+            background-color: #2a2a2a;
+            transform: translateY(1px);
+            box-shadow: 0 0 0 2px var(--accent-soft);
+        }
+
+        .primary {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-soft);
+        }
+
+        .wide {
+            min-width: 90px;
+        }
+
+        /* Subs: same accent/glow behavior as primary (Play/Pause) */
+        .subs-btn {
+            /* intentionally empty to inherit .primary style */
+        }
+
+        .status {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        @media (max-width: 400px) {
+            .nav-grid {
+                grid-template-columns: 64px 64px 64px;
+            }
+            button {
+                min-width: 54px;
+                height: 40px;
+            }
+        }
+
+        /* Compact layout for small phones (e.g. iPhone SE/8) */
+        body.compact .panel-extras {
+            display: none; /* hide Extras panel on very small screens */
+        }
+
+        body.compact .panel {
+            margin-bottom: 8px;
+            padding: 8px;
+        }
+
+        body.compact button {
+            height: 40px;
+            min-width: 54px;
+            font-size: 12px;
+        }
+
+        body.compact .subtitle {
+            margin-bottom: 6px;
+        }
+
+        /* Nav buttons: static matrix-style stripe background, text ABOVE */
+        .nav-matrix {
+            position: relative;
+            overflow: hidden;
+            background-image:
+                repeating-linear-gradient(
+                    to bottom,
+                    rgba(123, 92, 255, 0.35) 0px,
+                    rgba(123, 92, 255, 0.35) 2px,
+                    transparent 2px,
+                    transparent 4px
+                ),
+                repeating-linear-gradient(
+                    to right,
+                    rgba(123, 92, 255, 0.20) 0px,
+                    rgba(123, 92, 255, 0.20) 1px,
+                    transparent 1px,
+                    transparent 5px
+                );
+            background-blend-mode: screen;
+            background-size: 100% 4px, 6px 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Matrix effect background -->
+    <canvas id="matrix-canvas"></canvas>
+
+    <!-- Original content wrapper -->
+    <div class="content">
+        <div class="subtitle">Kronos Pro Remote · v3.1 · total control ©2026</div>
+        <!-- Compact now-playing line pulled from /nowplaying -->
+        <div id="nowplaying" class="nowplaying-line">Idle</div>
+
+        <!-- Extras: app shortcuts (1 row, 4 buttons) -->
+        <div class="panel panel-extras">
+            <div class="panel-title">Extras</div>
+            <div class="row" style="margin-bottom:6px;">
+                <button onclick="sendNav('elem_movies')">Movies</button>
+                <button onclick="sendNav('elem_tv')">Shows</button>
+                <button onclick="sendNav('wnt')">Anime</button>
+                <button onclick="sendNav('iptv')">IP TV</button>
+            </div>
+        </div>
+
+        <!-- Playback controls (2 rows) -->
+        <div class="panel">
+            <div class="panel-title">Playback</div>
+            <div class="row" style="margin-bottom:6px;">
+                <button onclick="sendNav('prev')">⏮ Prev</button>
+                <button onclick="sendNav('rew')">⏪ Rew</button>
+                <button onclick="sendNav('fwd')">⏩ Fwd</button>
+                <button onclick="sendNav('next')">⏭ Next</button>
+            </div>
+            <div class="row">
+                <button class="primary wide" onclick="sendNav('playpause')">⏯ Play/Pause</button>
+                <button onclick="sendNav('stop')">⏹ Stop</button>
+                <button onclick="sendNav('osd')">📊 Info</button>
+                <!-- Subs button styled like primary (accent + glow) -->
+                <button class="primary subs-btn" onclick="sendNav('subs_download')">📝 Subs</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">Navigation</div>
+            <div class="nav-grid">
+                <div></div>
+                <button
+                    class="primary nav-matrix"
+                    onclick="sendNav('up'); return false;"
+                    ontouchstart="sendNav('up'); event.preventDefault(); event.stopPropagation();"
+                >▲</button>
+                <div></div>
+
+                <button
+                    class="nav-matrix"
+                    onclick="sendNav('left'); return false;"
+                    ontouchstart="sendNav('left'); event.preventDefault(); event.stopPropagation();"
+                >◀</button>
+                <button
+                    class="primary nav-matrix"
+                    onclick="sendNav('ok'); return false;"
+                    ontouchstart="sendNav('ok'); event.preventDefault(); event.stopPropagation();"
+                >OK</button>
+                <button
+                    class="nav-matrix"
+                    onclick="sendNav('right'); return false;"
+                    ontouchstart="sendNav('right'); event.preventDefault(); event.stopPropagation();"
+                >▶</button>
+
+                <button
+                    onclick="sendNav('back'); return false;"
+                    ontouchstart="sendNav('back'); event.preventDefault(); event.stopPropagation();"
+                >Back</button>
+                <button
+                    class="nav-matrix"
+                    onclick="sendNav('down'); return false;"
+                    ontouchstart="sendNav('down'); event.preventDefault(); event.stopPropagation();"
+                >▼</button>
+                <button
+                    onclick="sendNav('home'); return false;"
+                    ontouchstart="sendNav('home'); event.preventDefault(); event.stopPropagation();"
+                >Home</button>
+            </div>
+        </div>
+
+        <!-- Volume -->
+        <div class="panel">
+            <div class="panel-title">Volume</div>
+            <div class="row">
+                <button
+                    onclick="sendNav('voldown'); return false;"
+                    ontouchstart="sendNav('voldown'); event.preventDefault(); event.stopPropagation();"
+                >🔉 Vol -</button>
+                <button class="primary" onclick="sendNav('mute')">🔇 Mute</button>
+                <button
+                    onclick="sendNav('volup'); return false;"
+                    ontouchstart="sendNav('volup'); event.preventDefault(); event.stopPropagation();"
+                >🔊 Vol +</button>
+            </div>
+        </div>
+
+        <div class="status" id="status">Ready</div>
+    </div>
+
+    <script>
+    // ---------- Matrix effect ----------
+
+    (function initMatrix() {
+        var canvas = document.getElementById('matrix-canvas');
+        if (!canvas || !canvas.getContext) return;
+        var ctx = canvas.getContext('2d');
+
+        var w, h, columns, drops;
+        var fontSize = 12;
+        var chars = '¥ΞΛΠΩ矩陣ネ';
+
+        function resize() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            columns = Math.floor(w / fontSize);
+            drops = [];
+            for (var i = 0; i < columns; i++) {
+                drops[i] = Math.random() * -20;
+            }
+        }
+        function draw() {
+            // Slight fade to black for trail effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.11)';
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.fillStyle = 'rgba(123, 92, 255, 0.9)'; // purple-ish
+            ctx.font = fontSize + 'px monospace';
+
+            for (var i = 0; i < drops.length; i++) {
+                var text = chars.charAt(Math.floor(Math.random() * chars.length));
+                var x = i * fontSize;
+                var y = drops[i] * fontSize;
+
+                ctx.fillText(text, x, y);
+
+                if (y > h && Math.random() > 0.975) {
+                    drops[i] = Math.random() * -20;
+                } else {
+                    drops[i] += 1;
+                }
+            }
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        setInterval(draw, 50);
+    })();
+
+    // ---------- Long-press / selection / context menu disable ----------
+
+    document.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+    });
+
+    document.addEventListener('selectstart', function (e) {
+        e.preventDefault();
+    });
+
+    document.addEventListener('dragstart', function (e) {
+        e.preventDefault();
+    });
+
+    // Block manual scroll / drag scroll on touch and wheel
+    document.addEventListener('touchmove', function (e) {
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('wheel', function (e) {
+        e.preventDefault();
+    }, { passive: false });
+
+    // Disable double-tap zoom on iOS
+    (function () {
+        var lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            var now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+    })();
+
+    // ---------- Compact layout detection for small phones ----------
+
+    (function () {
+        function updateCompactMode() {
+            var h = window.innerHeight || document.documentElement.clientHeight;
+            var w = window.innerWidth  || document.documentElement.clientWidth;
+
+            // Tune thresholds if needed after testing on SE/8
+            var isSmall = (h <= 640) || (w <= 375);
+
+            if (isSmall) {
+                document.body.classList.add('compact');
+            } else {
+                document.body.classList.remove('compact');
+            }
+        }
+
+        window.addEventListener('load', updateCompactMode);
+        window.addEventListener('resize', updateCompactMode);
+    })();
+
+    // ---------- Original remote logic (NO global debounce) ----------
+
+    function setStatus(text) {
+        var el = document.getElementById("status");
+        if (el) el.textContent = text;
+    }
+
+    function sendNav(key) {
+        setStatus("Sending: " + key + " …");
+        fetch("/nav?key=" + encodeURIComponent(key), {
+            method: "POST"
+        }).then(function (resp) {
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            return resp.text();
+        }).then(function () {
+            setStatus("OK: " + key);
+        }).catch(function (err) {
+            console.error(err);
+            setStatus("Error: " + err);
+        });
+    }
+
+    // ---------- Now Playing poller (uses /nowplaying) ----------
+
+    function updateNowPlaying() {
+        fetch("/nowplaying", { method: "GET" })
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                return resp.text();
+            })
+            .then(function (text) {
+                var el = document.getElementById("nowplaying");
+                if (el) el.textContent = text || "Idle";
+            })
+            .catch(function (err) {
+                console.error(err);
+            });
+    }
+
+    // Pull once on load, then every 5 seconds
+    window.addEventListener("load", function () {
+        updateNowPlaying();
+        setInterval(updateNowPlaying, 5000);
+    });
+    </script>
+</body>
+</html>
