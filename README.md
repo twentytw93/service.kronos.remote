@@ -1,4 +1,4 @@
-#Kronos Pro Remote
+# Kronos Pro Remote
 
 Kronos Pro Remote is a program add-on for **Kodi 21.x (Omega)** designed for **LibreELEC** and **Windows** systems. 
 It provides a professional-grade remote control experience for Kodi, with a focus on precision, responsiveness, and system stability.
